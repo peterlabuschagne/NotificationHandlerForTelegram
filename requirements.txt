@@ -1,0 +1,8 @@
+requests==2.22.0
+sklearn==0.0
+
+# Please update these requirements. If you're using pip to manage your virtual environment (you should be), you can use 
+# $ pip freeze > requirements.txt. Please check the generated requirements.txt file after this command.
+# It will bloated and you will need to remove the sub-dependencies of the packages that you're using. For instance, if scikit-learn depends on numpy, 
+# it will freeze the version of numpy pip installed for scikit learn, which is not actually a requirement. Only scikit learn is, and when you use pip to install 
+# scikit-learn, numpy will handle the requirements/dependencies at that time of install. If you freeze the numpy version too, you might run into issues. 
