@@ -1,8 +1,9 @@
+import config
 import json
 import requests
 import urllib
 
-TOKEN = "<botToken>"
+TOKEN = config.Token
 URL = "https://api.telegram.org/bot{}/".format(TOKEN)
 
 def GetUrl(url):
@@ -30,11 +31,15 @@ def GetLastUpdateId(updates):
 
 def SendMessage(text, chatID, replyMarkup=None):
     text = urllib.parse.quote_plus(text)
-    url = URL + "sendMessage?text={}&chat_id={}&parse_mode=Markdown".format(text, chatID)
+    url = URL + "sendMessage?text={}&chat_id={}".format(text, chatID)
     if replyMarkup:
         url += "&reply_markup={}".format(replyMarkup)
-    GetUrl(url)
+    return GetJsonFromUrl(url)
 
 def SendAnimation(chatID):
     url = URL + "sendAnimation?chat_id={}&animation=https://media.giphy.com/media/YVNiYNd87ddxgi8vnm/giphy.gif".format(chatID)
     GetUrl(url)
+
+def DeleteMessage(messageID, chatID):
+    url = URL + "deleteMessage?chat_id={}&message_id={}".format(chatID,messageID)
+    return GetJsonFromUrl(url)

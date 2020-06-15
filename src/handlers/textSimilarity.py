@@ -1,6 +1,7 @@
-from collections import Counter
 import numpy as np
 import time
+
+from collections import Counter
 from sklearn.feature_extraction.text import CountVectorizer
 from sklearn.metrics.pairwise import cosine_similarity as cosineSimilarity
 

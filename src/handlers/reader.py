@@ -1,80 +1,108 @@
-import telegraminterface as Telegram
 import time
 
 from datetime import datetime
 from multiprocessing import Manager, Process
-from src.utils.dbhelper import DBHelper, Users
-from textSimilarity import TextSimilarity
+from src.db import notifications, users
+from src.handlers import telegram as Telegram
+from src.handlers.textSimilarity import TextSimilarity
 
-db = DBHelper()
-users = Users()
+notifications = notifications.Notifications()
+users = users.Users()
 textSimilarity  = TextSimilarity()
 
-def updates(messageDict,similarityDict,parentTimes):
+def updates(messageDict,similarityDict,parentTimes,messagesToBlock):
     lastUpdateID = 0
     while True:
-        updates = Telegram.GetUpdates(lastUpdateID)
-        if len(updates["result"]) > 0:
-            lastUpdateID = Telegram.GetLastUpdateId(updates) + 1
-            messageDict, similarityDict, parentTimes = handleUpdates(updates,messageDict,similarityDict,parentTimes)
-            print("messagedict in updates: ", len(messageDict))
-            print("similarityDict in updates: ", len(similarityDict))
-            print("parentTimes in updates: ", len(parentTimes))
+        try:
+            updates = Telegram.GetUpdates(lastUpdateID)
+            print("Last update request: ", datetime.now())
+            if len(updates["result"]) > 0:
+                lastUpdateID = Telegram.GetLastUpdateId(updates) + 1
+                messageDict, similarityDict, parentTimes, messagesToBlock = handleUpdates(updates,messageDict,similarityDict,parentTimes,messagesToBlock)
+                print("messagedict in updates: ", len(messageDict))
+                print("similarityDict in updates: ", len(similarityDict))
+                print("Summaries in updates: ", len(parentTimes))
+        except Exception as e:
+            print("GetUpdates exception, waiting 10s before retry")
+            print("Exception: ", e)
+            time.sleep(10)
+            pass
+        
 
 def sendSummary(messageDict,similarityDict,parentTimes):
+    secondsToWait = 360
     while True:
         for parent in parentTimes.keys():
             children = similarityDict[parent]
             timeofMessage = parentTimes[parent]
             timeSinceParentMessage = getTimeDifference(timeofMessage,datetime.now())
-            if timeSinceParentMessage > 10:
+            if timeSinceParentMessage > secondsToWait:
                 textSummary = getSummarisedText(parent,children,messageDict)
                 if textSummary != "":
-                    textSummary = '10s since parent message:\n\n{}\n\nshowing summary for {} similar messages:\n\n{}'.format(messageDict[parent], len(similarityDict[parent]), textSummary)
+                    textSummary = '{}s since parent message:\n\n{}\n\nshowing summary for {} similar messages:\n\n{}'.format(secondsToWait,messageDict[parent], len(similarityDict[parent]), textSummary)
                     sendMessageToAllUsers(textSummary)
                 del parentTimes[parent]
-        print('\n\nsendSummary process, messageDict: ', len(messageDict))
-        print("sendsummary process, similarityDict: ", len(similarityDict))
-        print("sendSummary processs, parentTimes: ", len(parentTimes))
         time.sleep(1)
 
-def handleUpdates(updates,messageDict,similarityDict,parentTimes):
+def handleUpdates(updates,messageDict,similarityDict,parentTimes,messagesToBlock):
     for update in updates["result"]:
         try:
             text, chat, messageID = getTelegramMessage(update)
         except:
             text, chat, messageID = getTelegramChannelPost(update)
         if text == '/deleteall':
-            db.delete_all()
+            notifications.delete_all()
             messageDict = clearDictProxy(messageDict) # for thread manager to detect delete changes
             similarityDict = clearDictProxy(similarityDict) # for thread manager to detect delete changes
             parentTimes = clearDictProxy(parentTimes) # for thread manager to detect delete changes
-            Telegram.SendMessage("All items have been deleted from the database", chat,)
+            Telegram.SendMessage("All items have been deleted from the FishNet database", chat,)
         elif text == "/start":
             Telegram.SendMessage('Welcome to the FishNet bot, where messages are in abundance and the net catches them all\n\nPlease enter a password with the prefix / to gain access', chat)
         elif text == "/itsabouttime69":
-            Telegram.SendMessage('Well you got it right... guess I should start sending you messages now', chat)
-            users.add_user(chat)
-            Telegram.SendAnimation(chat)
+            if str(chat) not in users.get_users():
+                Telegram.SendMessage('Well you got it right... guess I should start sending you messages now', chat)
+                users.addUser(chat)
+                Telegram.SendAnimation(chat)
+                print(users.get_users())
+        elif text == "/running":
+            Telegram.SendMessage('Yes, it is still running', chat)
+        elif text == "/summary":
+            summaryMessage = "sendSummary process, messageDict: {}, similarityDict: {}, Pending Summaries: {}".format(len(messageDict), len(similarityDict), len(parentTimes))
+            Telegram.SendMessage(summaryMessage, chat)
+        elif text == "/getSummary":
+            for parent in parentTimes.keys():
+                children = similarityDict[parent]
+                textSummary = getSummarisedText(parent,children,messageDict)
+                Telegram.SendMessage(textSummary,chat)
+        elif text.startswith("/blocked"):
+            message = text[8:]
+            Telegram.SendMessage('You have blocked {}'.format(text), chat)
+            messagesToBlock = blockMessage(message,similarityDict,messageDict,messagesToBlock)
+            
+        elif text.startswith("/"):
+            Telegram.SendMessage('Unrecognized Command', chat)
+            continue
         else:
-            timeOfProcessing = datetime.now()
-            db.add_item(text, chat,messageID, datetime.now())
-            messageDict = db.updateDict(messageDict)
-            messageCount = len(messageDict) 
+            print(messageID)
+            if True: 
+                timeOfProcessing = datetime.now()
+                notifications.add_item(text, chat,messageID, datetime.now())
+                messageDict = notifications.updateDict(messageDict)
+                messageCount = len(messageDict) 
 
-            if messageCount > 1:
-                similarityDict = compareMessages(messageDict,similarityDict)
-                if isMessageSendAllowed(messageID,similarityDict):
+                if messageCount > 1:
+                    similarityDict = compareMessages(messageDict,similarityDict)
+                    if isMessageSendAllowed(messageID,similarityDict,parentTimes,timeOfProcessing):
+                        sendMessageToAllUsers(messageDict[messageID])
+                    if messageCount > 2:
+                        if messageID in similarityDict.keys():
+                            parentTimes = updateParentTimes(parentTimes,[messageID],timeOfProcessing)
+                        similarityDict, parentTimes = hasParentSummaryBeenSent(messageID,similarityDict,parentTimes,timeOfProcessing,text)
+                    else:
+                        parentTimes = updateParentTimes(parentTimes,similarityDict.keys(),timeOfProcessing)
+                elif messageCount == 1:
                     sendMessageToAllUsers(messageDict[messageID])
-                if messageCount > 2:
-                    if messageID in similarityDict.keys():
-                        parentTimes = updateParentTimes(parentTimes,[messageID],timeOfProcessing)
-                    similarityDict, parentTimes = hasParentSummaryBeenSent(messageID,similarityDict,parentTimes,timeOfProcessing)   
-                else:
-                    parentTimes = updateParentTimes(parentTimes,similarityDict.keys(),timeOfProcessing)
-            elif messageCount == 1:
-                sendMessageToAllUsers(messageDict[messageID])
-    return messageDict, similarityDict, parentTimes
+    return messageDict, similarityDict, parentTimes, messagesToBlock
 
 def getTelegramMessage(update):
     text = update["message"]["text"]
@@ -171,13 +199,13 @@ def messagesToCompare(messageDict,parent,child):
 def addToSimilarityDict(tempParent, tempKey, similarityDict):
     tempDict = dict()
     tempDict = similarityDict
-    if not tempParent: 
+    if not tempParent: # == False
         tempDict[tempKey[0]] = [tempKey[1]] + tempDict[tempKey[0]]
-    if not tempKey: 
+    if not tempKey: # == False
         tempDict[tempParent] = []
     return tempDict
 
-def isMessageSendAllowed(messageID, similarityDict):
+def isMessageSendAllowed(messageID, similarityDict,parentTimes,timeOfProcessing):
     if isMessageAParentWithoutChildren(messageID,similarityDict):
         return True
     else: 
@@ -191,13 +219,14 @@ def isMessageAParentWithoutChildren(messageID, similarityDict):
     else:
         return False
 
-def hasParentSummaryBeenSent(messageID, similarityDict, parentTimes, timeOfProcessing):
+def hasParentSummaryBeenSent(messageID, similarityDict, parentTimes, timeOfProcessing, currentMessage):
     parent = doesMessageIDHaveParent(messageID,similarityDict)
     if not parent:
         return similarityDict, parentTimes
     elif parent not in parentTimes.keys():
         similarityDict = setNewParent(parent, messageID, similarityDict)
         parentTimes[messageID] = timeOfProcessing
+        sendMessageToAllUsers(currentMessage)
         return similarityDict, parentTimes
     return similarityDict, parentTimes
     
@@ -218,7 +247,7 @@ def removeDictValue(values, newKey):
         if newKey != messageID:
             temp.append(messageID)
     return temp
-        
+
 def getTimeDifference(startMessage,endMessage):
     startMessage = datetime.strptime(str(startMessage), '%Y-%m-%d %H:%M:%S.%f')
     endMessage = datetime.strptime(str(endMessage), '%Y-%m-%d %H:%M:%S.%f')
@@ -227,8 +256,16 @@ def getTimeDifference(startMessage,endMessage):
     return seconds
 
 def sendMessageToAllUsers(text):
+    messageResponse = list()
     for user in users.get_users():
-        Telegram.SendMessage(text,user)
+        messageResponse.append(Telegram.SendMessage(text,user))
+    return messageResponse
+
+def deleteMessageForAllUsers(messageIDs):
+    i = 0
+    for user in users.get_users():
+        Telegram.DeleteMessage(messageIDs[i],user)
+        i += 1
 
 def getSummarisedText(parent,children,messageDict):
     uniqueText = getUniqueText(parent,children,messageDict)
@@ -253,4 +290,32 @@ def concatenate(textArray):
     string = string[:-2]
     return string
 
+def populateSentMessageIDs(content):
+    sentMessageIDs = list()
+    try:
+        for response in content:
+            sentMessageIDs.append(response["result"]["message_id"])
+    except:
+        pass
+    return sentMessageIDs
 
+def blockMessage(message,similarityDict,messageDict,messagesToBlock):
+    parent = findParent(message,similarityDict,messageDict)
+    if parent != 0:
+        temp = messagesToBlock
+        temp.append(parent)
+        messagesToBlock = temp
+    return messagesToBlock
+
+
+def findParent(message,similarityDict,messageDict):
+    text = list()
+    text.append(message)
+    text.append(message)
+    for key in similarityDict.keys():
+        text[1] = messageDict[key]
+        similarity = textSimilarity.GetSingleSimilarity(text)
+        if similarity > 0.7:
+            return key
+    return 0
+        

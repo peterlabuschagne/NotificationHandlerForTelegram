@@ -1,12 +1,21 @@
 # Put the code here that you need to run the application/start the application
-from src.reader import Manager, Process, db, users, sendSummary, updates
+import config
+
+from multiprocessing import Manager, Process 
+from src.handlers.reader import updates, sendSummary
+from src.db import users, notifications
+
+
+notifications = notifications.Notifications()
+users = users.Users()
 
 def main():
     manager = Manager()
     messageDict = manager.dict()
     similarityDict = manager.dict()
     parentTimes = manager.dict()
-    updatesProcess = Process(target=updates, args=(messageDict,similarityDict,parentTimes,))
+    messagesToBlock = manager.list()
+    updatesProcess = Process(target=updates, args=(messageDict,similarityDict,parentTimes,messagesToBlock,))
     sendSummaryProcess = Process(target=sendSummary, args=(messageDict,similarityDict,parentTimes,))
     updatesProcess.start()
     sendSummaryProcess.start()
@@ -14,8 +23,14 @@ def main():
     sendSummaryProcess.join()
 
 if __name__ == '__main__':
-    db.setup()
+    # setup
+    notifications.setup()
     users.setup()
+
+    # config
     users.delete_all()
-    users.add_user('729427424')
+    for chatID in config.Users:    
+        users.addUser(chatID)
+    
+    # run
     main()
