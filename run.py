@@ -28,7 +28,7 @@ if __name__ == '__main__':
     users.setup()
 
     # config
-    users.delete_all()
+    users.delete_all() # refactor
     for chatID in config.Users:    
         users.addUser(chatID)
     

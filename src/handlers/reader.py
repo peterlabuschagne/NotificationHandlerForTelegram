@@ -1,3 +1,4 @@
+import config
 import time
 
 from datetime import datetime
@@ -15,14 +16,17 @@ def updates(messageDict,similarityDict,parentTimes,messagesToBlock):
     while True:
         try:
             updates = Telegram.GetUpdates(lastUpdateID)
-            print("Last update request: ", datetime.now())
+            print("Last update request: ", datetime.now()) # make this a command that can be queried by telegram
             if len(updates["result"]) > 0:
                 lastUpdateID = Telegram.GetLastUpdateId(updates) + 1
                 messageDict, similarityDict, parentTimes, messagesToBlock = handleUpdates(updates,messageDict,similarityDict,parentTimes,messagesToBlock)
+                
+                # remove these prints and set as command that can be queried OR make one method
                 print("messagedict in updates: ", len(messageDict))
                 print("similarityDict in updates: ", len(similarityDict))
                 print("Summaries in updates: ", len(parentTimes))
         except Exception as e:
+            # log these exceptions into DB
             print("GetUpdates exception, waiting 10s before retry")
             print("Exception: ", e)
             time.sleep(10)
@@ -30,7 +34,7 @@ def updates(messageDict,similarityDict,parentTimes,messagesToBlock):
         
 
 def sendSummary(messageDict,similarityDict,parentTimes):
-    secondsToWait = 360
+    secondsToWait = config.SummaryDelay # WIP - would be nice to set this in telegram
     while True:
         for parent in parentTimes.keys():
             children = similarityDict[parent]
@@ -46,19 +50,21 @@ def sendSummary(messageDict,similarityDict,parentTimes):
 
 def handleUpdates(updates,messageDict,similarityDict,parentTimes,messagesToBlock):
     for update in updates["result"]:
+        # rather check for channel/normal message here
         try:
-            text, chat, messageID = getTelegramMessage(update)
+            text, chat, messageID = Telegram.GetMessage(update)
         except:
-            text, chat, messageID = getTelegramChannelPost(update)
+            text, chat, messageID = Telegram.GetChannelPost(update)
+        # could summarize these into commands method
         if text == '/deleteall':
             notifications.delete_all()
             messageDict = clearDictProxy(messageDict) # for thread manager to detect delete changes
             similarityDict = clearDictProxy(similarityDict) # for thread manager to detect delete changes
             parentTimes = clearDictProxy(parentTimes) # for thread manager to detect delete changes
-            Telegram.SendMessage("All items have been deleted from the FishNet database", chat,)
+            Telegram.SendMessage("All items have been deleted from the FishNet database", chat)
         elif text == "/start":
             Telegram.SendMessage('Welcome to the FishNet bot, where messages are in abundance and the net catches them all\n\nPlease enter a password with the prefix / to gain access', chat)
-        elif text == "/itsabouttime69":
+        elif text == "/selectedpassword":
             if str(chat) not in users.get_users():
                 Telegram.SendMessage('Well you got it right... guess I should start sending you messages now', chat)
                 users.addUser(chat)
@@ -91,7 +97,7 @@ def handleUpdates(updates,messageDict,similarityDict,parentTimes,messagesToBlock
                 messageCount = len(messageDict) 
 
                 if messageCount > 1:
-                    similarityDict = compareMessages(messageDict,similarityDict)
+                    similarityDict = textSimilarity.CompareMessages(messageDict,similarityDict)
                     if isMessageSendAllowed(messageID,similarityDict,parentTimes,timeOfProcessing):
                         sendMessageToAllUsers(messageDict[messageID])
                     if messageCount > 2:
@@ -104,52 +110,17 @@ def handleUpdates(updates,messageDict,similarityDict,parentTimes,messagesToBlock
                     sendMessageToAllUsers(messageDict[messageID])
     return messageDict, similarityDict, parentTimes, messagesToBlock
 
-def getTelegramMessage(update):
-    text = update["message"]["text"]
-    chat = update["message"]["chat"]["id"]
-    messageID = update["message"]["message_id"]
-    return text, chat, messageID
-
-def getTelegramChannelPost(update):
-    text = update["channel_post"]["text"]
-    chat = update["channel_post"]["chat"]["id"]
-    messageID = update["channel_post"]["message_id"]
-    return text, chat, messageID
-
 def clearDictProxy(dictionary):
     temp = dictionary
     temp.clear()
     dictionary = temp
     return dictionary
 
-def compareMessages(messageDict,similarityDict):
-    if isEmpty(similarityDict): # if this is the first comparison being made
-        text, keys = getFirstComparisonTextAndKeys(messageDict)
-        similarity = textSimilarity.GetSingleSimilarity(text)
-        if similarity > 0.7:
-            similarityDict[keys[0]] = [keys[1]]
-        else:
-            similarityDict[keys[0]] = []
-            similarityDict[keys[1]] = []
-    else:
-        parent, child = existingComparisons(similarityDict)
-        tempParent, tempKey = messagesToCompare(messageDict,parent,child)
-        similarityDict = addToSimilarityDict(tempParent,tempKey,similarityDict)
-    return similarityDict
-
 def isEmpty(anyStructure):
     if anyStructure:
         return False
     else:
         return True
-
-def getFirstComparisonTextAndKeys(messageDict):
-    text = []
-    keys = [list(messageDict.keys())[0]]
-    keys.append(list(messageDict.keys())[1])
-    text.append(messageDict[keys[0]])
-    text.append(messageDict[keys[1]])
-    return text, keys
 
 def updateParentTimes(parentTimes, keys, timeOfProcessing):
     for key in keys:
@@ -162,48 +133,6 @@ def GetMaxKeyID(self, dictionary):
         if key > maxID:
             maxID = key
     return maxID
-
-def existingComparisons(similarityDict):
-    parent = [p for p in similarityDict.keys()]
-    child = getChild(similarityDict)
-    return parent, child    
-
-def getChild(similarityDict):
-    values = [v for v in similarityDict.values()]
-    child = []
-    for sublist in values:
-        for item in sublist:
-            child.append(item)
-    return child
-
-def messagesToCompare(messageDict,parent,child):
-    text = []
-    keys = []
-    i = 0
-    for key in messageDict.keys():
-        if key not in parent: # if key is in parent, then don't need to compare it to itself
-            if key not in child: # compare to see if similar to any parents
-                for p in parent:
-                    text.clear()
-                    text.append(messageDict[p]) 
-                    text.append(messageDict[key])
-                    similarity = textSimilarity.GetSingleSimilarity(text)
-                    if similarity > 0.7:
-                        keys.append(p)
-                        keys.append(key)
-                        return False, keys
-                    tempParent = key
-                    i += 1
-    return tempParent, False
-
-def addToSimilarityDict(tempParent, tempKey, similarityDict):
-    tempDict = dict()
-    tempDict = similarityDict
-    if not tempParent: # == False
-        tempDict[tempKey[0]] = [tempKey[1]] + tempDict[tempKey[0]]
-    if not tempKey: # == False
-        tempDict[tempParent] = []
-    return tempDict
 
 def isMessageSendAllowed(messageID, similarityDict,parentTimes,timeOfProcessing):
     if isMessageAParentWithoutChildren(messageID,similarityDict):
@@ -314,7 +243,7 @@ def findParent(message,similarityDict,messageDict):
     text.append(message)
     for key in similarityDict.keys():
         text[1] = messageDict[key]
-        similarity = textSimilarity.GetSingleSimilarity(text)
+        similarity = textSimilarity.getSingleSimilarity(text)
         if similarity > 0.7:
             return key
     return 0

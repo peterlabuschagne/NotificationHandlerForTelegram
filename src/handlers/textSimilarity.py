@@ -44,8 +44,8 @@ class TextSimilarity:
         similarity = np.triu(np.array(similarity)) 
         return uniqueText, similarity
 
-    def GetSingleSimilarity(self,text):
-        vectors, features = self.GetVectorsAndFeatures(text)
+    def getSingleSimilarity(self,text):
+        vectors, _ = self.GetVectorsAndFeatures(text)
         similarity = self.CustomCosineSimilarity(vectors[:][0],vectors[:][1])
         return similarity
 
@@ -53,3 +53,74 @@ class TextSimilarity:
         vectors, features = self.GetVectorsAndFeatures(text)
         uniqueText = self.GetUniqueText(vectors, features)
         return uniqueText
+
+    def CompareMessages(self,messageDict,similarityDict):
+        if self.isEmpty(similarityDict): # if this is the first comparison being made
+            text, keys = self.getFirstComparisonTextAndKeys(messageDict)
+            similarity = self.getSingleSimilarity(text)
+            if similarity > 0.7:
+                similarityDict[keys[0]] = [keys[1]]
+            else:
+                similarityDict[keys[0]] = []
+                similarityDict[keys[1]] = []
+        else:
+            parent, child = self.existingComparisons(similarityDict)
+            tempParent, tempKey = self.messagesToCompare(messageDict,parent,child)
+            similarityDict = self.addToSimilarityDict(tempParent,tempKey,similarityDict)
+        return similarityDict
+
+    def isEmpty(self,anyStructure):
+        if anyStructure:
+            return False
+        else:
+            return True
+
+    def getFirstComparisonTextAndKeys(self,messageDict):
+        text = []
+        keys = [list(messageDict.keys())[0]]
+        keys.append(list(messageDict.keys())[1])
+        text.append(messageDict[keys[0]])
+        text.append(messageDict[keys[1]])
+        return text, keys
+
+    def existingComparisons(self,similarityDict):
+        parent = [p for p in similarityDict.keys()]
+        child = self.getChild(similarityDict)
+        return parent, child    
+
+    def getChild(self,similarityDict):
+        values = [v for v in similarityDict.values()]
+        child = []
+        for sublist in values:
+            for item in sublist:
+                child.append(item)
+        return child
+
+    def messagesToCompare(self,messageDict,parent,child):
+        text = []
+        keys = []
+        i = 0
+        for key in messageDict.keys():
+            if key not in parent: # if key is in parent, then don't need to compare it to itself
+                if key not in child: # compare to see if similar to any parents
+                    for p in parent:
+                        text.clear()
+                        text.append(messageDict[p]) 
+                        text.append(messageDict[key])
+                        similarity = self.getSingleSimilarity(text)
+                        if similarity > 0.7:
+                            keys.append(p)
+                            keys.append(key)
+                            return False, keys
+                        tempParent = key
+                        i += 1
+        return tempParent, False
+
+    def addToSimilarityDict(self,tempParent,tempKey,similarityDict):
+        tempDict = dict()
+        tempDict = similarityDict
+        if not tempParent: # == False
+            tempDict[tempKey[0]] = [tempKey[1]] + tempDict[tempKey[0]]
+        if not tempKey: # == False
+            tempDict[tempParent] = []
+        return tempDict
