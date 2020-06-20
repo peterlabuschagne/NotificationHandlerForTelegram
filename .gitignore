@@ -96,7 +96,7 @@ celerybeat-schedule
 *.sage.py
 
 # VSCode
-.vscode/
+settings.json
 
 # Environments
 .env
