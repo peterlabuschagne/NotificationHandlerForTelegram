@@ -55,3 +55,12 @@ def GetChannelPost(update):
     chat = update["channel_post"]["chat"]["id"]
     messageID = update["channel_post"]["message_id"]
     return text, chat, messageID
+
+def populateSentMessageIDs(content):
+    sentMessageIDs = list()
+    try:
+        for response in content:
+            sentMessageIDs.append(response["result"]["message_id"])
+    except:
+        pass
+    return sentMessageIDs
