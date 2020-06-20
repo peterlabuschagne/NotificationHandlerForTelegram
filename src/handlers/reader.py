@@ -13,42 +13,45 @@ textSimilarity  = TextSimilarity()
 
 def updates(messageDict,similarityDict,parentTimes,messagesToBlock):
     lastUpdateID = 0
+    lastRequest = datetime.now
     while True:
         try:
             updates = Telegram.GetUpdates(lastUpdateID)
-            print("Last update request: ", datetime.now()) # WIP - make this a command that can be queried by telegram
             if len(updates["result"]) > 0:
                 lastUpdateID = Telegram.GetLastUpdateId(updates) + 1
-                messageDict, similarityDict, parentTimes, messagesToBlock = handleUpdates(updates,messageDict,similarityDict,parentTimes,messagesToBlock)
-                
-                # WIP - remove these prints and set as command that can be queried OR make one method
-                print("messagedict in updates: ", len(messageDict))
-                print("similarityDict in updates: ", len(similarityDict))
-                print("Summaries in updates: ", len(parentTimes))
-        except Exception as e:
-            # WIP - log these exceptions into DB
-            print("GetUpdates exception, waiting 10s before retry")
-            print("Exception: ", e)
+                messageDict, similarityDict, parentTimes, messagesToBlock = handleUpdates(updates,messageDict,similarityDict,parentTimes,messagesToBlock,lastRequest)
+
+            lastRequest = datetime.now()
+        except Exception as ex:
+            requestException = 'updates exception with last request {}, waiting 10s before retry\n\nException: {}'.format(lastRequest,ex)  
+            print(requestException)
             time.sleep(10)
             pass
         
 
 def sendSummary(messageDict,similarityDict,parentTimes):
-    secondsToWait = config.SummaryDelay # WIP - would be nice to set this in telegram
     while True:
-        for parent in parentTimes.keys():
-            children = similarityDict[parent]
-            timeofMessage = parentTimes[parent]
-            timeSinceParentMessage = getTimeDifference(timeofMessage,datetime.now())
-            if timeSinceParentMessage > secondsToWait:
-                textSummary = textSimilarity.GetSummarisedText(parent,children,messageDict)
-                if textSummary != "":
-                    textSummary = '{}s since parent message:\n\n{}\n\nshowing summary for {} similar messages:\n\n{}'.format(secondsToWait,messageDict[parent], len(similarityDict[parent]), textSummary)
-                    sendMessageToAllUsers(textSummary)
-                del parentTimes[parent]
-        time.sleep(1)
+        try:
+            secondsToWait = config.SummaryInterval # WIP - would be nice to set this in telegram
+            for parent in parentTimes.keys():
+                children = similarityDict[parent]
+                timeofMessage = parentTimes[parent]
+                timeSinceParentMessage = getTimeDifference(timeofMessage,datetime.now())
+                if timeSinceParentMessage > secondsToWait:
+                    textSummary = textSimilarity.GetSummarisedText(parent,children,messageDict)
+                    if textSummary != "":
+                        textSummary = '{}s since parent message:\n\n{}\n\nshowing summary for {} similar messages:\n\n{}'.format(secondsToWait,messageDict[parent], len(similarityDict[parent]), textSummary)
+                        sendMessageToAllUsers(textSummary)
+                    del parentTimes[parent]
+            time.sleep(1)
+        except Exception as ex:
+            sendSummaryException = 'sendSummary exception at {}, waiting 10s before retry\n\nException: {}'.format(datetime.now,ex)  
+            print(sendSummaryException)
+            time.sleep(10)
+            pass
+        
 
-def handleUpdates(updates,messageDict,similarityDict,parentTimes,messagesToBlock):
+def handleUpdates(updates,messageDict,similarityDict,parentTimes,messagesToBlock,lastRequest):
     for update in updates["result"]:
         # WIP - rather check for channel/normal message here
         try:
@@ -56,41 +59,49 @@ def handleUpdates(updates,messageDict,similarityDict,parentTimes,messagesToBlock
         except:
             text, chat, messageID = Telegram.GetChannelPost(update)
         # WIP - could summarize these into commands method
-        if text == '/deleteall':
+        if text.startswith("/blocked"):
+            message = text[8:] # WIP - find index instead
+            Telegram.SendMessage('You have blocked {}'.format(text), chat)
+            messagesToBlock = blockMessage(message,similarityDict,messageDict,messagesToBlock)
+        elif text == '/deleteall':
             notifications.delete_all()
             messageDict = clearDictProxy(messageDict) # for thread manager to detect delete changes
             similarityDict = clearDictProxy(similarityDict) # for thread manager to detect delete changes
             parentTimes = clearDictProxy(parentTimes) # for thread manager to detect delete changes
             Telegram.SendMessage("All items have been deleted from the FishNet database", chat)
-        elif text == "/start":
-            Telegram.SendMessage('Welcome to the FishNet bot, where messages are in abundance and the net catches them all\n\nPlease enter a password with the prefix / to gain access', chat)
-        elif text == "/selectedpassword":
-            if str(chat) not in users.get_users():
-                Telegram.SendMessage('Well you got it right... guess I should start sending you messages now', chat)
-                users.addUser(chat)
-                Telegram.SendAnimation(chat)
-                print(users.get_users())
-        elif text == "/running":
-            Telegram.SendMessage('Yes, it is still running', chat)
-        elif text == "/summary":
-            summaryMessage = "sendSummary process, messageDict: {}, similarityDict: {}, Pending Summaries: {}".format(len(messageDict), len(similarityDict), len(parentTimes))
-            Telegram.SendMessage(summaryMessage, chat)
-        elif text == "/getSummary":
+        elif text == "/getsummary":
             for parent in parentTimes.keys():
                 children = similarityDict[parent]
                 textSummary = textSimilarity.GetSummarisedText(parent,children,messageDict)
                 Telegram.SendMessage(textSummary,chat)
-        elif text.startswith("/blocked"):
-            message = text[8:]
-            Telegram.SendMessage('You have blocked {}'.format(text), chat)
-            messagesToBlock = blockMessage(message,similarityDict,messageDict,messagesToBlock)
-            
+        elif text == "/running":
+            Telegram.SendMessage('Yes, it is still running\nLast update request: ' + str(lastRequest), chat)
+        elif text == "/selectedpassword":
+            if str(chat) not in users.get_users():  
+                Telegram.SendMessage('Well you got it right... guess I should start sending you messages now', chat)
+                users.addUser(chat)
+                Telegram.SendAnimation(chat)
+                print(users.get_users())
+        elif text.startswith("/setinterval"):
+            try:
+                oldInterval = config.SummaryInterval
+                newInterval = text[12:]
+                config.SummaryInterval = newInterval
+                Telegram.SendMessage('Summary interval set from {}s to {}s'.format(oldInterval, newInterval), chat)
+            except:
+                Telegram.SendMessage('Could not set summary interval, ensure correct message format of /setinterval<seconds>',chat)
+                pass
+        elif text == "/start":
+            Telegram.SendMessage('Welcome to the FishNet bot, where messages are in abundance and the net catches them all\n\nPlease enter a password with the prefix / to gain access', chat)
+        elif text == "/status":
+            summaryMessage = 'Total Messages: {}\nGrouped Messages: {}\nPending Summaries: {}'.format(len(messageDict), len(similarityDict), len(parentTimes))
+            Telegram.SendMessage(summaryMessage, chat)
         elif text.startswith("/"):
             Telegram.SendMessage('Unrecognized Command', chat)
             continue
         else:
             print(messageID)
-            if True: 
+            if True: # WIP - accept specific user/channel messages only
                 timeOfProcessing = datetime.now()
                 notifications.add_item(text, chat,messageID, datetime.now())
                 messageDict = notifications.updateDict(messageDict)
