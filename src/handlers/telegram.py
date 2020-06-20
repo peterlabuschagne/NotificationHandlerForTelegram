@@ -43,3 +43,15 @@ def SendAnimation(chatID):
 def DeleteMessage(messageID, chatID):
     url = URL + "deleteMessage?chat_id={}&message_id={}".format(chatID,messageID)
     return GetJsonFromUrl(url)
+
+def GetMessage(update):
+    text = update["message"]["text"]
+    chat = update["message"]["chat"]["id"]
+    messageID = update["message"]["message_id"]
+    return text, chat, messageID
+
+def GetChannelPost(update):
+    text = update["channel_post"]["text"]
+    chat = update["channel_post"]["chat"]["id"]
+    messageID = update["channel_post"]["message_id"]
+    return text, chat, messageID
