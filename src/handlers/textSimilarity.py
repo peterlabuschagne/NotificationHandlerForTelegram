@@ -124,3 +124,26 @@ class TextSimilarity:
         if not tempKey: # == False
             tempDict[tempParent] = []
         return tempDict
+
+    def GetSummarisedText(self,parent,children,messageDict):
+        uniqueText = self.GetUniqueTextFromDict(parent,children,messageDict)
+        uniqueText = self.concatenate(uniqueText)
+        return uniqueText
+
+    def GetUniqueTextFromDict(self,parent,children,messageDict):
+        uniqueText = []
+        for child in children:
+            text = [messageDict[parent],messageDict[child]]
+            uniqueList = self.GetSingleUniqueText(text)
+            for unique in uniqueList:
+                if unique not in uniqueText:
+                    uniqueText += [unique]
+        return uniqueText
+
+    def concatenate(self,textArray):
+        string = ""
+        for text in textArray:
+            string += text
+            string += ", "
+        string = string[:-2]
+        return string

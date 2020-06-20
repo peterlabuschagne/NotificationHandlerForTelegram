@@ -41,7 +41,7 @@ def sendSummary(messageDict,similarityDict,parentTimes):
             timeofMessage = parentTimes[parent]
             timeSinceParentMessage = getTimeDifference(timeofMessage,datetime.now())
             if timeSinceParentMessage > secondsToWait:
-                textSummary = getSummarisedText(parent,children,messageDict)
+                textSummary = textSimilarity.GetSummarisedText(parent,children,messageDict)
                 if textSummary != "":
                     textSummary = '{}s since parent message:\n\n{}\n\nshowing summary for {} similar messages:\n\n{}'.format(secondsToWait,messageDict[parent], len(similarityDict[parent]), textSummary)
                     sendMessageToAllUsers(textSummary)
@@ -78,7 +78,7 @@ def handleUpdates(updates,messageDict,similarityDict,parentTimes,messagesToBlock
         elif text == "/getSummary":
             for parent in parentTimes.keys():
                 children = similarityDict[parent]
-                textSummary = getSummarisedText(parent,children,messageDict)
+                textSummary = textSimilarity.GetSummarisedText(parent,children,messageDict)
                 Telegram.SendMessage(textSummary,chat)
         elif text.startswith("/blocked"):
             message = text[8:]
@@ -195,38 +195,6 @@ def deleteMessageForAllUsers(messageIDs):
     for user in users.get_users():
         Telegram.DeleteMessage(messageIDs[i],user)
         i += 1
-
-def getSummarisedText(parent,children,messageDict):
-    uniqueText = getUniqueText(parent,children,messageDict)
-    uniqueText = concatenate(uniqueText)
-    return uniqueText
-
-def getUniqueText(parent,children,messageDict):
-    uniqueText = []
-    for child in children:
-        text = [messageDict[parent],messageDict[child]]
-        uniqueList = textSimilarity.GetSingleUniqueText(text)
-        for unique in uniqueList:
-            if unique not in uniqueText:
-                uniqueText += [unique]
-    return uniqueText
-
-def concatenate(textArray):
-    string = ""
-    for text in textArray:
-        string += text
-        string += ", "
-    string = string[:-2]
-    return string
-
-def populateSentMessageIDs(content):
-    sentMessageIDs = list()
-    try:
-        for response in content:
-            sentMessageIDs.append(response["result"]["message_id"])
-    except:
-        pass
-    return sentMessageIDs
 
 def blockMessage(message,similarityDict,messageDict,messagesToBlock):
     parent = findParent(message,similarityDict,messageDict)
