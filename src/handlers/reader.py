@@ -16,17 +16,17 @@ def updates(messageDict,similarityDict,parentTimes,messagesToBlock):
     while True:
         try:
             updates = Telegram.GetUpdates(lastUpdateID)
-            print("Last update request: ", datetime.now()) # make this a command that can be queried by telegram
+            print("Last update request: ", datetime.now()) # WIP - make this a command that can be queried by telegram
             if len(updates["result"]) > 0:
                 lastUpdateID = Telegram.GetLastUpdateId(updates) + 1
                 messageDict, similarityDict, parentTimes, messagesToBlock = handleUpdates(updates,messageDict,similarityDict,parentTimes,messagesToBlock)
                 
-                # remove these prints and set as command that can be queried OR make one method
+                # WIP - remove these prints and set as command that can be queried OR make one method
                 print("messagedict in updates: ", len(messageDict))
                 print("similarityDict in updates: ", len(similarityDict))
                 print("Summaries in updates: ", len(parentTimes))
         except Exception as e:
-            # log these exceptions into DB
+            # WIP - log these exceptions into DB
             print("GetUpdates exception, waiting 10s before retry")
             print("Exception: ", e)
             time.sleep(10)
@@ -50,12 +50,12 @@ def sendSummary(messageDict,similarityDict,parentTimes):
 
 def handleUpdates(updates,messageDict,similarityDict,parentTimes,messagesToBlock):
     for update in updates["result"]:
-        # rather check for channel/normal message here
+        # WIP - rather check for channel/normal message here
         try:
             text, chat, messageID = Telegram.GetMessage(update)
         except:
             text, chat, messageID = Telegram.GetChannelPost(update)
-        # could summarize these into commands method
+        # WIP - could summarize these into commands method
         if text == '/deleteall':
             notifications.delete_all()
             messageDict = clearDictProxy(messageDict) # for thread manager to detect delete changes
