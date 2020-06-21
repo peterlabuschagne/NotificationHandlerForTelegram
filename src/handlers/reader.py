@@ -55,53 +55,55 @@ def handleUpdates(updates,messageDict,similarityDict,parentTimes,messagesToBlock
     for update in updates["result"]:
         text, chat, messageID = Telegram.MessageDetails(update)
         # WIP - could summarize these into commands method
-        if text.startswith("/blocked"):
-            try:
-                message = text[8:] # WIP - find index instead
-                Telegram.SendMessage('You have blocked {}'.format(text), chat)
-                messagesToBlock = blockMessage(message,similarityDict,messageDict,messagesToBlock)
-                Telegram.SendMessage('The following message has now been added to blocked messages:\n\n{}'.format(message), chat)
-            except:
-                Telegram.SendMessage('Message could not be blocked',chat)
-                # WIP - check if the message has already been blocked
-                # WIP - log exception as to why the message couldn't be blocked
-                pass
-        elif text == '/deleteall':
-            notifications.delete_all()
-            messageDict = clearDictProxy(messageDict) # for thread manager to detect delete changes
-            similarityDict = clearDictProxy(similarityDict) # for thread manager to detect delete changes
-            parentTimes = clearDictProxy(parentTimes) # for thread manager to detect delete changes
-            Telegram.SendMessage("All items have been deleted from the FishNet database", chat)
-        elif text == "/getsummary":
-            for parent in parentTimes.keys():
-                children = similarityDict[parent]
-                textSummary = textSimilarity.GetSummarisedText(parent,children,messageDict)
-                Telegram.SendMessage(textSummary,chat)
-        elif text == "/running":
-            Telegram.SendMessage('Yes, it is still running\nLast update request: ' + str(lastRequest), chat)
-        elif text == "/selectedpassword":
-            if str(chat) not in users.get_users():  
-                Telegram.SendMessage('Well you got it right... guess I should start sending you messages now', chat)
-                users.addUser(chat)
-                Telegram.SendAnimation(chat)
-                print(users.get_users())
-        elif text.startswith("/setinterval"):
-            try:
-                oldInterval = config.SummaryInterval
-                newInterval = text[12:]
-                config.SummaryInterval = newInterval
-                Telegram.SendMessage('Summary interval set from {}s to {}s'.format(oldInterval, newInterval), chat)
-            except:
-                Telegram.SendMessage('Could not set summary interval, ensure correct message format of /setinterval<seconds>',chat)
-                pass
-        elif text == "/start":
-            Telegram.SendMessage('Welcome to the FishNet bot, where messages are in abundance and the net catches them all\n\nPlease enter a password with the prefix / to gain access', chat)
-        elif text == "/status":
-            summaryMessage = 'Total Messages: {}\nGrouped Messages: {}\nPending Summaries: {}'.format(len(messageDict), len(similarityDict), len(parentTimes))
-            Telegram.SendMessage(summaryMessage, chat)
-        elif text.startswith("/"):
-            Telegram.SendMessage('Unrecognized Command', chat)
-            continue
+        if Telegram.IsCommand(text):
+            if text.startswith("/blocked"):
+                try:
+                    message = text[8:] # WIP - find index instead
+                    Telegram.SendMessage('You have blocked {}'.format(message), chat)
+                    messagesToBlock = blockMessage(message,similarityDict,messageDict,messagesToBlock)
+                    Telegram.SendMessage('The following message has now been added to blocked messages:\n\n{}'.format(message), chat)
+                except:
+                    Telegram.SendMessage('Message could not be blocked',chat)
+                    # WIP - check if the message has already been blocked
+                    # WIP - log exception as to why the message couldn't be blocked
+                    pass
+            # WIP - view blocked messages command
+            elif text == '/deleteall':
+                notifications.delete_all()
+                messageDict = clearDictProxy(messageDict) # for thread manager to detect delete changes
+                similarityDict = clearDictProxy(similarityDict) # for thread manager to detect delete changes
+                parentTimes = clearDictProxy(parentTimes) # for thread manager to detect delete changes
+                Telegram.SendMessage("All items have been deleted from the FishNet database", chat)
+            elif text == "/getsummary":
+                for parent in parentTimes.keys():
+                    children = similarityDict[parent]
+                    textSummary = textSimilarity.GetSummarisedText(parent,children,messageDict)
+                    Telegram.SendMessage(textSummary,chat)
+            elif text == "/running":
+                Telegram.SendMessage('Yes, it is still running\nLast update request: ' + str(lastRequest), chat)
+            elif text == '/{}'.format(config.SignUpPassword):
+                if str(chat) not in users.get_users():  
+                    Telegram.SendMessage('Well you got it right... guess I should start sending you messages now', chat)
+                    users.addUser(chat)
+                    Telegram.SendAnimation(chat)
+                    print(users.get_users())
+            elif text.startswith("/setinterval"):
+                try:
+                    oldInterval = config.SummaryInterval
+                    newInterval = text[12:]
+                    config.SummaryInterval = newInterval
+                    Telegram.SendMessage('Summary interval set from {}s to {}s'.format(oldInterval, newInterval), chat)
+                except:
+                    Telegram.SendMessage('Could not set summary interval, ensure correct message format of /setinterval<seconds>',chat)
+                    pass
+            elif text == "/start":
+                Telegram.SendMessage('Welcome to the FishNet bot, where messages are in abundance and the net catches them all\n\nPlease enter a password with the prefix / to gain access', chat)
+            elif text == "/status":
+                summaryMessage = 'Total Messages: {}\nGrouped Messages: {}\nPending Summaries: {}'.format(len(messageDict), len(similarityDict), len(parentTimes))
+                Telegram.SendMessage(summaryMessage, chat)
+            else:
+                Telegram.SendMessage('Unrecognized Command', chat)
+
         else:
             print(messageID)
             if True: # WIP - accept specific user/channel messages only

@@ -58,9 +58,12 @@ def GetChannelPost(update):
 
 def MessageDetails(update):
     try:
-        return self.GetMessage(update)
+        return GetMessage(update)
     except:
-        return self.GetChannelPost(update)
+        return GetChannelPost(update)
+
+def IsCommand(text):
+    return text.startswith('/')
 
 def populateSentMessageIDs(content):
     sentMessageIDs = list()
@@ -70,3 +73,4 @@ def populateSentMessageIDs(content):
     except:
         pass
     return sentMessageIDs
+
