@@ -32,8 +32,8 @@ def updates(messageDict,similarityDict,parentTimes,messagesToBlock):
 def sendSummary(messageDict,similarityDict,parentTimes):
     while True:
         try:
-            secondsToWait = config.SummaryInterval # WIP - would be nice to set this in telegram
             for parent in parentTimes.keys():
+                secondsToWait = config.SummaryInterval
                 children = similarityDict[parent]
                 timeofMessage = parentTimes[parent]
                 timeSinceParentMessage = getTimeDifference(timeofMessage,datetime.now())
@@ -53,16 +53,19 @@ def sendSummary(messageDict,similarityDict,parentTimes):
 
 def handleUpdates(updates,messageDict,similarityDict,parentTimes,messagesToBlock,lastRequest):
     for update in updates["result"]:
-        # WIP - rather check for channel/normal message here
-        try:
-            text, chat, messageID = Telegram.GetMessage(update)
-        except:
-            text, chat, messageID = Telegram.GetChannelPost(update)
+        text, chat, messageID = Telegram.MessageDetails(update)
         # WIP - could summarize these into commands method
         if text.startswith("/blocked"):
-            message = text[8:] # WIP - find index instead
-            Telegram.SendMessage('You have blocked {}'.format(text), chat)
-            messagesToBlock = blockMessage(message,similarityDict,messageDict,messagesToBlock)
+            try:
+                message = text[8:] # WIP - find index instead
+                Telegram.SendMessage('You have blocked {}'.format(text), chat)
+                messagesToBlock = blockMessage(message,similarityDict,messageDict,messagesToBlock)
+                Telegram.SendMessage('The following message has now been added to blocked messages:\n\n{}'.format(message), chat)
+            except:
+                Telegram.SendMessage('Message could not be blocked',chat)
+                # WIP - check if the message has already been blocked
+                # WIP - log exception as to why the message couldn't be blocked
+                pass
         elif text == '/deleteall':
             notifications.delete_all()
             messageDict = clearDictProxy(messageDict) # for thread manager to detect delete changes
