@@ -56,6 +56,12 @@ def GetChannelPost(update):
     messageID = update["channel_post"]["message_id"]
     return text, chat, messageID
 
+def MessageDetails(update):
+    try:
+        return self.GetMessage(update)
+    except:
+        return self.GetChannelPost(update)
+
 def populateSentMessageIDs(content):
     sentMessageIDs = list()
     try:
