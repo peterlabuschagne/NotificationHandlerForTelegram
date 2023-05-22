@@ -1,4 +1,4 @@
-requests==2.22.0
+requests==2.31.0
 sklearn==0.0
 
 # Please update these requirements. If you're using pip to manage your virtual environment (you should be), you can use 
